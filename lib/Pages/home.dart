@@ -5,13 +5,15 @@ import 'package:page_transition/page_transition.dart';
 import 'package:path/path.dart';
 import 'dart:io';
 import 'package:flutter/material.dart';
-import 'package:curved_navigation_bar/curved_navigation_bar.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 // import 'package:firebase_core/firebase_core.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:encrypto_decrypto/firebase_api.dart';
 import 'files.dart';
 import 'about.dart';
+// import 'dart:typed_data';
+import 'package:aes_crypt_null_safe/aes_crypt_null_safe.dart';
+import 'package:path_provider/path_provider.dart';
 
 class Home extends StatefulWidget {
   const Home({Key? key}) : super(key: key);
@@ -35,6 +37,7 @@ const MaterialColor primaryBlack = MaterialColor(
   },
 );
 const int _blackPrimaryValue = 0xFF000000;
+
 class _HomeState extends State<Home> {
 
   UploadTask? task;
@@ -42,42 +45,84 @@ class _HomeState extends State<Home> {
   FirebaseFile? decryptfile;
   bool isencryptdisabled = true;
   bool isdecryptdisabled = true;
+  var crypt = AesCrypt('my cool password');
 
   Future encrypt_selectfile() async{
     final result = await FilePicker.platform.pickFiles(
       allowMultiple: false,
-      allowedExtensions: ["pdf","doc"],
+      allowedExtensions: ["pdf","doc","docx"],
       type: FileType.custom,
     );
     if (result==null) return ;
     final path = result.files.single.path!;
+    // print("sooth");
+
     setState(() {
       encryptfile = File(path);
       isencryptdisabled = false;
     });
   }
 
-  Future uploadfile() async{
-    if (encryptfile == null) return;
-    final fileName = basename(encryptfile!.path);
-    final destination = fileName;
-    task = FirebaseApi.uploadFile(destination, encryptfile!);
-    setState(() {
-      encryptfile = null;
-      isencryptdisabled = true;
-    });
+  Future uploadfile() async {
+    try {
+      if (encryptfile == null) return;
+      final fileName = basename(encryptfile!.path);
+      final destination = fileName;
+      dynamic encFilepath;
+      crypt.setOverwriteMode(AesCryptOwMode.on);
+      // print(encryptfile!.path.toString().substring(0,62));
+      try {
+        encFilepath = crypt.encryptFileSync(encryptfile!.path.toString());
+        print('The encryption has been completed successfully.');
+        print('Encrypted file: $encFilepath');
+      }
+      on AesCryptException catch (e) {
+        if (e.type == AesCryptExceptionType.destFileExists) {
+          print('The encryption has been completed unsuccessfully.');
+          print(e.message);
+        }
+      }
+      // print(encFilepath.runtimeType);
+      // print(encryptfile.runtimeType);
+      encryptfile = File(encFilepath);
+      task = FirebaseApi.uploadFile(destination, encryptfile!);
+      setState(() {
+        encryptfile = null;
+        isencryptdisabled = true;
+      });
+    }
+    catch(e) {
+      print(e);
+    }
   }
 
   Future downloadfile() async{
     if(decryptfile == null) return;
     await FirebaseApi.downloadFile(decryptfile!.ref);
+    dynamic decFilepath;
+    final dir = await getExternalStorageDirectory();
+    // print(dir!.path);
+    // print(decryptfile!.name);
+    try {
+      decFilepath = crypt.decryptFileSync(dir!.path.toString()+'/'+decryptfile!.name.toString(),dir.path.toString()+'/dec_'+decryptfile!.name.toString());
+      print('The decryption has been completed successfully.');
+      print('Decrypted file 2: $decFilepath');
+      //print('File content: ' + File(decFilepath).readAsStringSync());
+    } on AesCryptException catch (e) {
+      if (e.type == AesCryptExceptionType.destFileExists) {
+        print('The decryption has been completed unsuccessfully.');
+        print(e.message);
+      }
+    }
+    final del=File(dir!.path.toString()+'/'+decryptfile!.name.toString());
+    await del.delete();
     setState(() {
       decryptfile = null;
       isdecryptdisabled = true;
     });
   }
 
-  int _selectedIndex=0;
+  final int _selectedIndex=0;
   static const List _route=[Home(),Files(),About()];
 
   @override
@@ -87,15 +132,16 @@ class _HomeState extends State<Home> {
     final decryptfilename = decryptfile !=null? decryptfile!.name : 'No File selected';
 
     return Scaffold(
-        bottomNavigationBar: CurvedNavigationBar(
-          color: Colors.black,
-          backgroundColor: (Colors.grey[900])!,
-          items: const <Widget>[
-            Icon(Icons.home, size: 30, color:Colors.white),
-            Icon(Icons.list, size: 30, color:Colors.white),
-            Icon(Icons.info, size: 30, color:Colors.white),
+        bottomNavigationBar: BottomNavigationBar(
+          backgroundColor: Colors.black,
+          selectedItemColor: Colors.white,
+          unselectedItemColor: Colors.grey[700],
+          items: const <BottomNavigationBarItem>[
+            BottomNavigationBarItem(icon: Icon(Icons.home,size: 30.0,),backgroundColor: Colors.white,label: "Home"),
+            BottomNavigationBarItem(icon: Icon(CupertinoIcons.download_circle,size: 30.0,),backgroundColor: Colors.grey,label: "Downloaded Files"),
+            BottomNavigationBarItem(icon: Icon(Icons.info_outlined,size: 30.0,),backgroundColor: Colors.grey,label: "About"),
           ],
-          index: _selectedIndex,
+          currentIndex: _selectedIndex,
           onTap: (index) {
             Navigator.pushReplacement(context, PageTransition(child: _route[index], type: PageTransitionType.fade));
             //Handle button tap
@@ -125,7 +171,7 @@ class _HomeState extends State<Home> {
                   text: TextSpan(
                     children: const [
                       TextSpan(
-                        text: "Encrypt:",
+                        text: "Encrypt :\n",
                         style:TextStyle(
                           fontWeight: FontWeight.bold,
                           fontFamily: "Open-sans",
@@ -133,7 +179,7 @@ class _HomeState extends State<Home> {
                         )
                         ,),
                       TextSpan(
-                        text: " Upload a document for encrypting and saving it in your database",
+                        text: "Upload a document for encrypting and saving it in your database",
                       ),
                     ],
                     style: TextStyle(
@@ -173,7 +219,19 @@ class _HomeState extends State<Home> {
                     ),
                   ),
                   IconButton(
-                    onPressed: isencryptdisabled? null : uploadfile,
+                    onPressed: isencryptdisabled? null : (){
+                      uploadfile();
+                      // encrypt_file();
+                      final Snackbar = SnackBar(
+                        content: Text("Encrypted And Uploaded!",
+                            style: TextStyle(letterSpacing: 3.0)),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(20.0),
+                        ),
+                        behavior: SnackBarBehavior.floating,
+                      );
+                      ScaffoldMessenger.of(context).showSnackBar(Snackbar);
+                    },
                     icon: Icon(
                       Icons.upload_file_outlined,
                     ),
@@ -203,7 +261,7 @@ class _HomeState extends State<Home> {
                   text: TextSpan(
                     children: const [
                       TextSpan(
-                        text: "Decrypt:",
+                        text: "Decrypt :\n",
                       style:TextStyle(
                         fontWeight: FontWeight.bold,
                         fontFamily: "Open-sans",
@@ -211,7 +269,7 @@ class _HomeState extends State<Home> {
                       )
                         ,),
                       TextSpan(
-                        text: " View a document from your database by decrypting it",
+                        text: "View a document from your database by decrypting it",
                       ),
                     ],
                     style: TextStyle(
@@ -233,7 +291,7 @@ class _HomeState extends State<Home> {
                       print(dfile);
                       setState(() {
                         decryptfile=dfile;
-                        isdecryptdisabled = dfile ? false : true;
+                        isdecryptdisabled = dfile==null ? true : false;
                       });
                     },
                     child: Padding(
@@ -258,9 +316,21 @@ class _HomeState extends State<Home> {
                     ),
                   ),
                   IconButton(
-                    onPressed: isdecryptdisabled? null : downloadfile,
+                    onPressed: isdecryptdisabled? null : (){
+                      downloadfile();
+                      final Snackbar = SnackBar(
+                        content: Text("Decrypted And Downloaded!",
+                        style: TextStyle(letterSpacing: 3.0),),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(20.0),
+                        ),
+                        behavior: SnackBarBehavior.floating,
+                        elevation: 40.0,
+                      );
+                      ScaffoldMessenger.of(context).showSnackBar(Snackbar);
+                    },
                     icon: Icon(
-                      Icons.download_outlined,
+                      Icons.download_for_offline_outlined,
                     ),
                     iconSize: 25.0,
                     color: Colors.white,
@@ -284,84 +354,3 @@ class _HomeState extends State<Home> {
     );
   }
 }
-
-
-
-
-//
-//
-//
-//
-//
-// class About extends StatefulWidget {
-//   const About({Key? key}) : super(key: key);
-//
-//   @override
-//   _AboutState createState() => _AboutState();
-// }
-//
-// class _AboutState extends State<About> {
-//
-//   @override
-//   Widget build(BuildContext context) {
-//     return Scaffold(
-//       backgroundColor: Colors.grey[900],
-//       appBar: AppBar(
-//         backgroundColor: Colors.black,
-//         title: Center(
-//           child: Text("Encrypto Decrypto",
-//             style: TextStyle(
-//               color: Colors.grey[300],
-//               fontWeight: FontWeight.bold,
-//               fontFamily: 'Open-sans',
-//               fontSize: 30.0,
-//             ),
-//           ),
-//         ),
-//       ),
-//       body:Container(
-//         child: Text("About"),
-//       ),
-//     );
-//   }
-// }
-//
-//
-//
-//
-//
-//
-//
-//
-// class Files extends StatefulWidget {
-//   const Files({Key? key}) : super(key: key);
-//
-//   @override
-//   _FilesState createState() => _FilesState();
-// }
-//
-// class _FilesState extends State<Files> {
-//
-//   @override
-//   Widget build(BuildContext context) {
-//     return Scaffold(
-//       backgroundColor: Colors.grey[900],
-//       appBar: AppBar(
-//         backgroundColor: Colors.black,
-//         title: Center(
-//           child: Text("Encrypto Decrypto",
-//             style: TextStyle(
-//               color: Colors.grey[300],
-//               fontWeight: FontWeight.bold,
-//               fontFamily: 'Open-sans',
-//               fontSize: 30.0,
-//             ),
-//           ),
-//         ),
-//       ),
-//       body:Container(
-//         child: Text("Files"),
-//       ),
-//     );
-//   }
-// }

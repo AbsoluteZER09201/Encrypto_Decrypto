@@ -2,7 +2,6 @@
 
 import 'package:flutter/material.dart';
 import 'package:flutter/cupertino.dart';
-import 'package:curved_navigation_bar/curved_navigation_bar.dart';
 import 'files.dart';
 import 'home.dart';
 import 'package:page_transition/page_transition.dart';
@@ -16,21 +15,22 @@ class About extends StatefulWidget {
 
 class _AboutState extends State<About> {
 
-  int _selectedIndex=2;
+  final int _selectedIndex=2;
   static const List _route=[Home(),Files(),About()];
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-        bottomNavigationBar: CurvedNavigationBar(
-          color: Colors.black,
-          backgroundColor: (Colors.grey[900])!,
-          items: const <Widget>[
-            Icon(Icons.home, size: 30, color:Colors.white),
-            Icon(Icons.list, size: 30, color:Colors.white),
-            Icon(Icons.info, size: 30, color:Colors.white),
+        bottomNavigationBar: BottomNavigationBar(
+          backgroundColor: Colors.black,
+          selectedItemColor: Colors.white,
+          unselectedItemColor: Colors.grey,
+          items: const <BottomNavigationBarItem>[
+            BottomNavigationBarItem(icon: Icon(Icons.home_outlined,size: 30.0),backgroundColor: Colors.white,label: "Home"),
+            BottomNavigationBarItem(icon: Icon(CupertinoIcons.download_circle,size: 30.0),backgroundColor: Colors.grey,label: "Downloaded Files"),
+            BottomNavigationBarItem(icon: Icon(CupertinoIcons.info_circle_fill,size: 30.0),backgroundColor: Colors.grey,label: "About"),
           ],
-          index: _selectedIndex,
+          currentIndex: _selectedIndex,
           onTap: (index) {
             Navigator.pushReplacement(context, PageTransition(child: _route[index], type: PageTransitionType.fade));
             //Handle button tap
@@ -50,11 +50,24 @@ class _AboutState extends State<About> {
             ),
           ),
         ),
-        body:Container(
-          child: Text("About",
-            style: TextStyle(fontSize: 30.0,
-            color: Colors.white,),
-          ),
+        body:Column(
+          mainAxisAlignment: MainAxisAlignment.start,
+          children: const [
+            SizedBox(height: 40.0,),
+            Text("About",
+              style: TextStyle(fontSize: 30.0,
+              color: Colors.white,),
+
+            ),
+            SizedBox(height: 70.0,),
+            Padding(
+              padding: EdgeInsets.all(10.0),
+              child: Text("The project aims to encrypt, upload and decrypt the documents using AES standard. \n\n\nMade By:\n\nSooraj S\nSiddhesh B\nSoorya SG",
+                  style: TextStyle(color:Colors.white, fontSize: 20.0,fontFamily: "open-sans")),
+
+            )
+
+          ],
         ),
     );
   }
